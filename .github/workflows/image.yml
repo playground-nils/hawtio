@@ -1,86 +1,79 @@
 name: Build Images
-
-on:
+'on':
   push:
     branches:
-      - main
-      - 4.x
+    - main
+    - 4.x
     paths-ignore:
-      - "**.md"
-  workflow_dispatch:
-
+    - '**.md'
+  workflow_dispatch: null
 env:
   MVN_ARGS: --batch-mode --no-transfer-progress
   PLATFORMS_TEST_APP: linux/amd64,linux/ppc64le,linux/s390x,linux/arm64
   PLATFORMS_TEST_SUITE: linux/amd64
-
 jobs:
   build:
-    if: github.repository_owner == 'hawtio'
+    if: github.repository_owner == 'playground-nils'
     strategy:
       fail-fast: false
       matrix:
-        java: ['17', '21']
+        java:
+        - '17'
+        - '21'
     runs-on: ubuntu-latest
     steps:
-      # --- Checkout code ---
-      - name: Checkout code
-        uses: actions/checkout@v6
-      # --- Set up Java ---
-      - name: Set up Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: "temurin"
-          java-version: ${{ matrix.java }}
-          cache: "maven"
-      # --- Enable QEMU and Buildx for multi-arch builds ---
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-      # --- Log in to Quay.io
-      - name: Log in to Quay.io
-        uses: docker/login-action@v4
-        with:
-          registry: quay.io
-          username: ${{ secrets.QUAY_USERNAME }}
-          password: ${{ secrets.QUAY_PASSWORD }}
-      # --- Install dependencies ---
-      - name: Install Maven dependencies
-        run: |
-          mvn ${MVN_ARGS} install -DskipTests
-      # --- Build and push auth-enabled images ---
-      - name: Build auth-enabled JARs
-        run: |
-          mvn ${MVN_ARGS} install -DskipTests -Pe2e -pl :hawtio-test-suite,:hawtio-tests-quarkus,:hawtio-tests-springboot -am -Dhawtio.authenticationEnabled=true
-      - name: Build and push multi-arch auth-enabled images
-        env:
-          REF_NAME: ${{ github.ref_name }}
-          JAVA_VERSION: ${{ matrix.java }}
-        run: |
-          if [ "$REF_NAME" = "main" ]; then
-            TAG_SUFFIX="5.x-$JAVA_VERSION"
-          else
-            TAG_SUFFIX="4.x-$JAVA_VERSION"
-          fi
-          JAVA_ARG="--build-arg JAVA_VERSION=$JAVA_VERSION"
-          docker buildx build --platform $PLATFORMS_TEST_SUITE $JAVA_ARG -f tests/hawtio-test-suite/Dockerfile -t quay.io/hawtio/hawtio-test-suite:$TAG_SUFFIX --push .
-          docker buildx build --platform $PLATFORMS_TEST_APP $JAVA_ARG -f tests/quarkus/Dockerfile -t quay.io/hawtio/hawtio-quarkus-test-app:$TAG_SUFFIX --push tests/quarkus
-          docker buildx build --platform $PLATFORMS_TEST_APP $JAVA_ARG -f tests/springboot/Dockerfile -t quay.io/hawtio/hawtio-springboot-test-app:$TAG_SUFFIX --push tests/springboot
-      # --- Build and push auth-disabled images ---
-      - name: Build auth-disabled JARs
-        run: |
-          mvn ${MVN_ARGS} install -DskipTests -Pe2e -pl :hawtio-tests-quarkus,:hawtio-tests-springboot -am -Dhawtio.authenticationEnabled=false
-      - name: Build and push multi-arch auth-disabled images
-        env:
-          REF_NAME: ${{ github.ref_name }}
-          JAVA_VERSION: ${{ matrix.java }}
-        run: |
-          if [ "$REF_NAME" = "main" ]; then
-            TAG_SUFFIX="5.x-$JAVA_VERSION-noauth"
-          else
-            TAG_SUFFIX="4.x-$JAVA_VERSION-noauth"
-          fi
-          JAVA_ARG="--build-arg JAVA_VERSION=$JAVA_VERSION"
-          docker buildx build --platform $PLATFORMS_TEST_APP $JAVA_ARG -f tests/quarkus/Dockerfile -t quay.io/hawtio/hawtio-quarkus-test-app:$TAG_SUFFIX --push tests/quarkus
-          docker buildx build --platform $PLATFORMS_TEST_APP $JAVA_ARG -f tests/springboot/Dockerfile -t quay.io/hawtio/hawtio-springboot-test-app:$TAG_SUFFIX --push tests/springboot
+    - name: Checkout code
+      uses: actions/checkout@v6
+    - name: Set up Java
+      uses: actions/setup-java@v5
+      with:
+        distribution: temurin
+        java-version: ${{ matrix.java }}
+        cache: maven
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v4
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v4
+    - name: Log in to Quay.io
+      uses: docker/login-action@v4
+      with:
+        registry: quay.io
+        username: ${{ secrets.QUAY_USERNAME }}
+        password: ${{ secrets.QUAY_PASSWORD }}
+    - name: Install Maven dependencies
+      run: 'mvn ${MVN_ARGS} install -DskipTests
+
+        '
+    - name: Build auth-enabled JARs
+      run: 'mvn ${MVN_ARGS} install -DskipTests -Pe2e -pl :hawtio-test-suite,:hawtio-tests-quarkus,:hawtio-tests-springboot
+        -am -Dhawtio.authenticationEnabled=true
+
+        '
+    - name: Build and push multi-arch auth-enabled images
+      env:
+        REF_NAME: ${{ github.ref_name }}
+        JAVA_VERSION: ${{ matrix.java }}
+      run: "if [ \"$REF_NAME\" = \"main\" ]; then\n  TAG_SUFFIX=\"5.x-$JAVA_VERSION\"\
+        \nelse\n  TAG_SUFFIX=\"4.x-$JAVA_VERSION\"\nfi\nJAVA_ARG=\"--build-arg JAVA_VERSION=$JAVA_VERSION\"\
+        \ndocker buildx build --platform $PLATFORMS_TEST_SUITE $JAVA_ARG -f tests/hawtio-test-suite/Dockerfile\
+        \ -t quay.io/hawtio/hawtio-test-suite:$TAG_SUFFIX --push .\ndocker buildx\
+        \ build --platform $PLATFORMS_TEST_APP $JAVA_ARG -f tests/quarkus/Dockerfile\
+        \ -t quay.io/hawtio/hawtio-quarkus-test-app:$TAG_SUFFIX --push tests/quarkus\n\
+        docker buildx build --platform $PLATFORMS_TEST_APP $JAVA_ARG -f tests/springboot/Dockerfile\
+        \ -t quay.io/hawtio/hawtio-springboot-test-app:$TAG_SUFFIX --push tests/springboot\n"
+    - name: Build auth-disabled JARs
+      run: 'mvn ${MVN_ARGS} install -DskipTests -Pe2e -pl :hawtio-tests-quarkus,:hawtio-tests-springboot
+        -am -Dhawtio.authenticationEnabled=false
+
+        '
+    - name: Build and push multi-arch auth-disabled images
+      env:
+        REF_NAME: ${{ github.ref_name }}
+        JAVA_VERSION: ${{ matrix.java }}
+      run: "if [ \"$REF_NAME\" = \"main\" ]; then\n  TAG_SUFFIX=\"5.x-$JAVA_VERSION-noauth\"\
+        \nelse\n  TAG_SUFFIX=\"4.x-$JAVA_VERSION-noauth\"\nfi\nJAVA_ARG=\"--build-arg\
+        \ JAVA_VERSION=$JAVA_VERSION\"\ndocker buildx build --platform $PLATFORMS_TEST_APP\
+        \ $JAVA_ARG -f tests/quarkus/Dockerfile -t quay.io/hawtio/hawtio-quarkus-test-app:$TAG_SUFFIX\
+        \ --push tests/quarkus\ndocker buildx build --platform $PLATFORMS_TEST_APP\
+        \ $JAVA_ARG -f tests/springboot/Dockerfile -t quay.io/hawtio/hawtio-springboot-test-app:$TAG_SUFFIX\
+        \ --push tests/springboot\n"
